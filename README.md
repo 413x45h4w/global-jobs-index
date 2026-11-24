@@ -216,6 +216,7 @@ The page is static HTML, CSS, and one script. It shows total open jobs, companie
 - USAJobs is empty unless you export a key.
 - Coresignal, Lightcast, and TheirStack do not fetch anything yet.
 - No LinkedIn. No Indeed.
+- `data/jobs.sqlite` is about 88 MB after this first pull. GitHub accepts it and warns above 50 MB. Each daily refresh appends observations, so the file will eventually pass GitHub's 100 MB limit. Before that, move observation history to chunked Parquet (or Git LFS) and keep only the job projection in the committed database.
 
 ## Tests
 
