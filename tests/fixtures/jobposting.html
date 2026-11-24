@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {"@type": "Organization", "name": "Ignore Me"},
+          {
+            "@type": "JobPosting",
+            "title": "Quant Researcher",
+            "datePosted": "2026-11-01",
+            "hiringOrganization": {"@type": "Organization", "name": "Example Markets"},
+            "jobLocationType": "TELECOMMUTE",
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                "addressLocality": "New York",
+                "addressRegion": "NY",
+                "addressCountry": "US"
+              }
+            },
+            "baseSalary": {
+              "@type": "MonetaryAmount",
+              "currency": "USD",
+              "value": {"@type": "QuantitativeValue", "minValue": 200000, "maxValue": 300000, "unitText": "YEAR"}
+            },
+            "url": "https://example.com/jobs/1",
+            "identifier": {"@type": "PropertyValue", "value": "qr-1"}
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body></body>
+</html>

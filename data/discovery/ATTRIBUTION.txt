@@ -1,0 +1,7 @@
+cc0-board-directory.csv
+Source: https://kalebconfer-sys.github.io/job-board-directory/job-board-directory.csv
+License: CC0 1.0 (public domain), as declared by the publisher
+Snapshot date: 2026-11-19
+Contents: public ATS board identifiers (company, token, careers URL, API URL, open-role count).
+This project re-fetches jobs from the vendor APIs. It does not copy listing text from the catalog.
+Personio and Rippling rows are kept for discovery only and are not fetched in this version.

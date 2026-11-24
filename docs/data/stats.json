@@ -1,0 +1,158 @@
+{
+  "generated_at": "2026-11-24T18:27:36+00:00",
+  "open_jobs": 53672,
+  "closed_jobs": 0,
+  "open_postings": 56210,
+  "closed_postings": 0,
+  "companies": 434,
+  "countries": 94,
+  "observations": 56210,
+  "with_pay": 5403,
+  "remote_jobs": 6170,
+  "postings_by_source": {
+    "greenhouse": 20922,
+    "smartrecruiters": 11883,
+    "lever": 7641,
+    "workday": 6512,
+    "ashby": 4336,
+    "workable": 2715,
+    "recruitee": 2195,
+    "commoncrawl": 6
+  },
+  "jobs_by_sector": {
+    "tech": 25674,
+    "other": 12763,
+    "industrial": 5035,
+    "fintech": 4067,
+    "health": 2797,
+    "trading": 1552,
+    "crypto": 1552,
+    "markets": 232
+  },
+  "top_countries": [
+    {
+      "country": "United States",
+      "jobs": 22241
+    },
+    {
+      "country": "United Kingdom",
+      "jobs": 2474
+    },
+    {
+      "country": "Germany",
+      "jobs": 2358
+    },
+    {
+      "country": "India",
+      "jobs": 1832
+    },
+    {
+      "country": "China",
+      "jobs": 1188
+    },
+    {
+      "country": "Singapore",
+      "jobs": 1154
+    },
+    {
+      "country": "Canada",
+      "jobs": 972
+    },
+    {
+      "country": "Netherlands",
+      "jobs": 872
+    },
+    {
+      "country": "France",
+      "jobs": 842
+    },
+    {
+      "country": "Japan",
+      "jobs": 559
+    },
+    {
+      "country": "Malaysia",
+      "jobs": 506
+    },
+    {
+      "country": "Australia",
+      "jobs": 506
+    },
+    {
+      "country": "Spain",
+      "jobs": 463
+    },
+    {
+      "country": "Ireland",
+      "jobs": 462
+    },
+    {
+      "country": "South Korea",
+      "jobs": 435
+    },
+    {
+      "country": "Brazil",
+      "jobs": 431
+    },
+    {
+      "country": "Mexico",
+      "jobs": 414
+    },
+    {
+      "country": "Portugal",
+      "jobs": 401
+    },
+    {
+      "country": "Poland",
+      "jobs": 365
+    },
+    {
+      "country": "Italy",
+      "jobs": 350
+    },
+    {
+      "country": "Hungary",
+      "jobs": 333
+    },
+    {
+      "country": "Vietnam",
+      "jobs": 292
+    },
+    {
+      "country": "Taiwan",
+      "jobs": 273
+    },
+    {
+      "country": "Israel",
+      "jobs": 269
+    },
+    {
+      "country": "Egypt",
+      "jobs": 255
+    },
+    {
+      "country": "Belgium",
+      "jobs": 254
+    },
+    {
+      "country": "United Arab Emirates",
+      "jobs": 247
+    },
+    {
+      "country": "Thailand",
+      "jobs": 235
+    },
+    {
+      "country": "Romania",
+      "jobs": 209
+    },
+    {
+      "country": "Hong Kong",
+      "jobs": 204
+    }
+  ],
+  "notable": {
+    "kalshi": 68,
+    "polymarket": 33
+  }
+}
