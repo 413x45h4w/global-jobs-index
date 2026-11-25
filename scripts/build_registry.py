@@ -355,8 +355,9 @@ def from_catalog(rows: list[dict], platform: str, *, limit: int | None, low: int
             continue
         token = parsed.board_id
         parsed.company = pretty_token(row.get("company") or token)
-        parsed.sector = "other"
+        parsed.sector = guess_sector(parsed.company, parsed.board_id)
         parsed.careers_url = row.get("board_url") or parsed.careers_url
+        parsed.expected_count = str(count)
         if platform == "lever":
             api = row.get("api_url") or ""
             if "api.eu.lever.co" in api:
@@ -367,34 +368,49 @@ def from_catalog(rows: list[dict], platform: str, *, limit: int | None, low: int
     return boards
 
 
+def guess_sector(company: str, token: str) -> str:
+    blob = f"{company} {token}".lower()
+    rules = (
+        ("markets", ("kalshi", "polymarket", "smarkets", "draftkings", "fanduel", "nasdaq", "cme group", "cboe")),
+        ("trading", ("jane street", "jump trading", "optiver", "flow traders", "tower research", "akuna", "five rings", "point72", "worldquant", "drw", "virtu", "bridgewater", "pdt")),
+        ("crypto", ("coinbase", "binance", "kraken", "gemini", "ripple", "fireblocks", "uniswap", "opensea", "chainalysis", "circle", "ledger")),
+        ("fintech", ("stripe", "plaid", "robinhood", "chime", "sofi", "nubank", "wise", "adyen", "brex", "ramp", "block")),
+        ("health", ("health", "pharma", "clinic", "hospital", "medical", "therapeut")),
+    )
+    for sector, keys in rules:
+        if any(key in blob for key in keys):
+            return sector
+    return "other"
+
+
 def main() -> None:
     rows = load_catalog(str(CATALOG))
+    manual = []
+    manual.extend(parse_table(GREENHOUSE, "greenhouse"))
+    manual.extend(parse_table(ASHBY, "ashby"))
+    manual.extend(parse_table(SMARTRECRUITERS, "smartrecruiters"))
+    overrides = {board.key: board for board in manual}
+    workday_names = {}
+    for line in WORKDAY.splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) < 6:
+            continue
+        _token, company, sector, _host, tenant, site = parts[:6]
+        workday_names[f"{tenant}__{site}"] = (company, sector)
     boards = []
-    boards.extend(parse_table(GREENHOUSE, "greenhouse"))
-    boards.extend(parse_table(ASHBY, "ashby"))
-    boards.extend(parse_table(SMARTRECRUITERS, "smartrecruiters"))
-    boards.extend(parse_table(WORKDAY, "workday"))
-    boards.extend(from_catalog(rows, "lever", limit=None, low=1, high=10**9, extras=set()))
-    boards.extend(
-        from_catalog(
-            rows,
-            "workable",
-            limit=40,
-            low=8,
-            high=80,
-            extras={"huggingface", "tether", "ledger", "ripple", "coinbase"},
-        )
-    )
-    boards.extend(
-        from_catalog(
-            rows,
-            "recruitee",
-            limit=30,
-            low=8,
-            high=80,
-            extras={"tether", "mayflower", "ledger"},
-        )
-    )
+    for platform in ("greenhouse", "ashby", "lever", "workable", "recruitee", "workday", "personio", "rippling"):
+        boards.extend(from_catalog(rows, platform, limit=None, low=1, high=10**9, extras=set()))
+    for board in boards:
+        override = overrides.get(board.key)
+        if override:
+            board.company = override.company
+            board.sector = override.sector
+        elif board.source == "workday" and board.board_id in workday_names:
+            board.company, board.sector = workday_names[board.board_id]
+    have = {board.key for board in boards}
+    for board in manual:
+        if board.key not in have:
+            boards.append(board)
     deduped = []
     seen = set()
     for board in boards:
@@ -417,6 +433,7 @@ def main() -> None:
                 "workday_host",
                 "workday_tenant",
                 "workday_site",
+                "expected_count",
             ],
         )
         writer.writeheader()

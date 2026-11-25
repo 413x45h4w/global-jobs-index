@@ -11,6 +11,8 @@ from jobdir.sources.ats import (
 )
 from jobdir.sources.commoncrawl import CommonCrawlAdapter
 from jobdir.sources.licensed import CoreSignalAdapter, LightcastAdapter, TheirStackAdapter
+from jobdir.sources.personio import PersonioAdapter
+from jobdir.sources.rippling import RipplingAdapter
 from jobdir.sources.usajobs import USAJobsAdapter
 
 ADAPTERS = {
@@ -23,6 +25,8 @@ ADAPTERS = {
         SmartRecruitersAdapter(),
         RecruiteeAdapter(),
         WorkdayAdapter(),
+        PersonioAdapter(),
+        RipplingAdapter(),
         USAJobsAdapter(),
         CommonCrawlAdapter(),
         CoreSignalAdapter(),

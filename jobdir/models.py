@@ -16,6 +16,7 @@ class Board:
     workday_host: str = ""
     workday_tenant: str = ""
     workday_site: str = ""
+    expected_count: str = ""
 
     @property
     def key(self) -> tuple[str, str]:

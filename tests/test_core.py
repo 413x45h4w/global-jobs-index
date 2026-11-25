@@ -240,6 +240,80 @@ class StoreTests(unittest.TestCase):
         self.assertGreater(self.store.counts()["observations"], before)
 
 
+class PersonioTests(unittest.TestCase):
+    def test_xml(self):
+        from jobdir.sources.personio import positions_from_xml
+
+        xml = """<?xml version="1.0"?>
+        <workzag-jobs>
+          <position>
+            <id>7</id>
+            <name>Engineer</name>
+            <subcompany>Example GmbH</subcompany>
+            <office>Berlin</office>
+            <department>Engineering</department>
+            <employmentType>permanent</employmentType>
+            <createdAt>2026-11-01T00:00:00+00:00</createdAt>
+            <jobDescriptions><jobDescription><value>ignore</value></jobDescription></jobDescriptions>
+          </position>
+        </workzag-jobs>
+        """
+        rows = positions_from_xml(xml)
+        self.assertEqual(rows[0]["title"], "Engineer")
+        self.assertEqual(rows[0]["company"], "Example GmbH")
+        self.assertNotIn("ignore", rows[0]["title"])
+
+
+class FacetTests(unittest.TestCase):
+    def test_pick_larger_facet(self):
+        from jobdir.sources.ats import _pick_split_facet
+
+        facets = [
+            {
+                "facetParameter": "jobFamilyGroup",
+                "values": [
+                    {"id": "a", "descriptor": "Eng", "count": 1800},
+                    {"id": "b", "descriptor": "Sales", "count": 900},
+                ],
+            }
+        ]
+        param, values = _pick_split_facet(facets, already=2000)
+        self.assertEqual(param, "jobFamilyGroup")
+        self.assertEqual(len(values), 2)
+        self.assertIsNone(_pick_split_facet(facets, already=2700))
+
+
+class ParquetTests(unittest.TestCase):
+    def test_roundtrip(self):
+        from jobdir.parquet_export import bootstrap_projection, export_parquet
+        from jobdir.storage import Store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = Store(str(root / "work.sqlite"))
+            run_id = store.start_run()
+            store.apply(
+                run_id,
+                FetchResult(
+                    source="ashby",
+                    board_id="kalshi",
+                    success=True,
+                    complete=True,
+                    observations=[obs(source="ashby", board_id="kalshi", source_job_id="a")],
+                ),
+                observed_at="2026-11-24T00:00:00+00:00",
+            )
+            info = export_parquet(store, root / "parquet")
+            self.assertTrue(info["observation_parts"])
+            store.close()
+            again = Store(str(root / "fresh.sqlite"))
+            loaded = bootstrap_projection(again, root / "parquet")
+            self.assertEqual(loaded, 1)
+            title = again.conn.execute("SELECT title FROM jobs").fetchone()[0]
+            self.assertEqual(title, "Site Reliability Engineer")
+            again.close()
+
+
 class JsonLdTests(unittest.TestCase):
     def test_graph(self):
         html = Path(__file__).parent.joinpath("fixtures", "jobposting.html").read_text(encoding="utf-8")

@@ -18,6 +18,7 @@ FIELDS = (
     "workday_host",
     "workday_tenant",
     "workday_site",
+    "expected_count",
 )
 
 
@@ -96,6 +97,7 @@ def _board_from(data: dict[str, str]) -> Board:
         workday_host=data.get("workday_host") or "",
         workday_tenant=data.get("workday_tenant") or "",
         workday_site=data.get("workday_site") or "",
+        expected_count=data.get("expected_count") or "",
     )
 
 

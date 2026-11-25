@@ -9,21 +9,24 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install DuckDB
+        run: pip install -r requirements.txt
       - name: Pull public ATS boards
         env:
           USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
           USAJOBS_USER_AGENT: ${{ secrets.USAJOBS_USER_AGENT }}
-        run: python3 -m jobdir run
-      - name: Commit append-only snapshot
+        run: python3 -m jobdir run --resume
+      - name: Commit parquet history and dashboard
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/jobs.sqlite docs/data
+          git add data/parquet data/boards.yaml data/boards.csv docs/data
           if git diff --staged --quiet; then
             echo "No data changes"
           else

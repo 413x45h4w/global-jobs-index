@@ -21,6 +21,9 @@ _ASHBY = re.compile(r"(?:jobs\.ashbyhq\.com|api\.ashbyhq\.com/posting-api/job-bo
 _WK = re.compile(r"apply\.workable\.com/(?!api(?:/|$)|j/|view/|embed/)([A-Za-z0-9_-]+)", re.I)
 _SR = re.compile(r"(?:jobs\.smartrecruiters\.com|api\.smartrecruiters\.com/v1/companies)/([A-Za-z0-9_-]+)", re.I)
 _RC = re.compile(r"https?://([A-Za-z0-9_-]+)\.recruitee\.com", re.I)
+_PERSONIO = re.compile(r"https?://([A-Za-z0-9_-]+)\.jobs\.personio\.[a-z.]+", re.I)
+_RIPPLING_API = re.compile(r"api\.rippling\.com/platform/api/ats/v1/board/([A-Za-z0-9_-]+)/jobs", re.I)
+_RIPPLING_SITE = re.compile(r"ats\.rippling\.com/([A-Za-z0-9_-]+)(?:/|$)", re.I)
 _WD = re.compile(
     r"https?://(?P<host>[a-z0-9.-]+\.myworkdayjobs\.com)(?:/[a-z]{2}-[A-Za-z]{2})?/(?P<site>[A-Za-z0-9_-]+)",
     re.I,
@@ -55,16 +58,27 @@ def parse_board_url(url: str) -> Board | None:
         if token.lower() in _SKIP_TOKENS:
             return None
         return Board(company=token, source="recruitee", board_id=token, careers_url=url)
+    personio = _PERSONIO.search(url)
+    if personio:
+        token = personio.group(1)
+        if token.lower() not in _SKIP_TOKENS:
+            return Board(company=token, source="personio", board_id=token, careers_url=url)
+    rippling = _RIPPLING_API.search(url) or _RIPPLING_SITE.search(url)
+    if rippling:
+        token = rippling.group(1)
+        if token.lower() not in _SKIP_TOKENS:
+            return Board(company=token, source="rippling", board_id=token, careers_url=url)
     cxs = re.search(r"https://([^/]+)/wday/cxs/([^/]+)/([^/]+)/jobs", url, re.I)
     if cxs:
+        tenant, site = cxs.group(2), cxs.group(3)
         return Board(
-            company=cxs.group(2),
+            company=tenant,
             source="workday",
-            board_id=cxs.group(2),
+            board_id=f"{tenant}__{site}",
             careers_url=url,
             workday_host=cxs.group(1),
-            workday_tenant=cxs.group(2),
-            workday_site=cxs.group(3),
+            workday_tenant=tenant,
+            workday_site=site,
         )
     match = _WD.search(url)
     if match:
@@ -96,7 +110,7 @@ def catalog_to_boards(rows: Iterable[dict], sources: set[str] | None = None) -> 
         source = (row.get("platform") or "").strip().lower()
         if sources and source not in sources:
             continue
-        if source not in {"greenhouse", "ashby", "lever", "workable", "recruitee", "workday"}:
+        if source not in {"greenhouse", "ashby", "lever", "workable", "recruitee", "workday", "personio", "rippling"}:
             continue
         try:
             roles = int(row.get("open_roles") or 0)
@@ -123,7 +137,7 @@ def catalog_to_boards(rows: Iterable[dict], sources: set[str] | None = None) -> 
                 parsed.workday_host = wd.group(1)
                 parsed.workday_tenant = wd.group(2)
                 parsed.workday_site = wd.group(3)
-                parsed.board_id = wd.group(2)
+                parsed.board_id = f"{wd.group(2)}__{wd.group(3)}"
         boards.append(parsed)
     return boards
 

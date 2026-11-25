@@ -103,6 +103,11 @@ CREATE INDEX IF NOT EXISTS idx_listings_board ON listings(source, board_id, stat
 CREATE INDEX IF NOT EXISTS idx_listings_job ON listings(job_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_obs_listing ON observations(listing_key);
+
+CREATE TABLE IF NOT EXISTS export_state (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
+);
 """
 
 
@@ -117,8 +122,9 @@ def _remote_int(value: bool | None) -> int | None:
 
 
 class Store:
-    def __init__(self, path: str):
+    def __init__(self, path: str, record_unchanged: bool = False):
         self.path = path
+        self.record_unchanged = record_unchanged
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=DELETE")
@@ -172,15 +178,24 @@ class Store:
                     continue
                 seen.add(listing_key)
                 previous = self.conn.execute(
-                    "SELECT job_id, first_seen FROM listings WHERE listing_key = ?",
+                    "SELECT job_id, first_seen, status FROM listings WHERE listing_key = ?",
                     (listing_key,),
                 ).fetchone()
                 first_seen = previous["first_seen"] if previous else observed_at
                 if previous and previous["job_id"] != job_id:
                     touched.add(previous["job_id"])
                 touched.add(job_id)
+                payload = json.dumps(observation_payload(obs), separators=(",", ":"))
+                unchanged = False
+                if previous and previous["status"] == "open" and not self.record_unchanged:
+                    last = self.conn.execute(
+                        "SELECT event, payload_json FROM observations WHERE listing_key = ? ORDER BY id DESC LIMIT 1",
+                        (listing_key,),
+                    ).fetchone()
+                    unchanged = bool(last and last["event"] == "seen" and last["payload_json"] == payload)
                 self._upsert_listing(obs, listing_key, job_id, first_seen, observed_at)
-                self._insert_observation(run_id, observed_at, listing_key, job_id, obs, "seen")
+                if not unchanged:
+                    self._insert_observation(run_id, observed_at, listing_key, job_id, obs, "seen", payload)
 
             closed = 0
             if result.complete and result.kind == "live_board":
@@ -263,7 +278,10 @@ class Store:
         job_id: str,
         obs: JobObservation,
         event: str,
+        payload: str | None = None,
     ) -> None:
+        if payload is None:
+            payload = json.dumps(observation_payload(obs), separators=(",", ":"))
         self.conn.execute(
             """
             INSERT INTO observations (
@@ -278,7 +296,7 @@ class Store:
                 obs.source,
                 obs.board_id,
                 event,
-                json.dumps(observation_payload(obs), separators=(",", ":")),
+                payload,
             ),
         )
 

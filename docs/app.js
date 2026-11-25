@@ -100,6 +100,9 @@ function renderStats() {
     .filter(Boolean)
     .join(" · ");
 
+  for (const id of ["source", "country", "sector"]) {
+    $(id).querySelectorAll("option:not(:first-child)").forEach((option) => option.remove());
+  }
   const sourceSelect = $("source");
   for (const name of Object.keys(sources)) {
     const option = document.createElement("option");
@@ -174,14 +177,16 @@ function escapeAttr(value) {
 }
 
 async function main() {
-  const [statsRes, jobsRes] = await Promise.all([fetch("data/stats.json"), fetch("data/jobs.json")]);
-  if (!statsRes.ok || !jobsRes.ok) {
+  const statsRes = await fetch("data/stats.json");
+  if (!statsRes.ok) {
     $("generated").textContent = "Dashboard data is not built yet. Run python3 -m jobdir run.";
     return;
   }
   state.stats = await statsRes.json();
-  const payload = await jobsRes.json();
-  state.jobs = payload.jobs || [];
+  renderStats();
+  const shards = state.stats.shards || [];
+  const parts = await Promise.all(shards.map((path) => fetch(path).then((res) => res.json())));
+  state.jobs = parts.flatMap((part) => part.jobs || []);
   renderStats();
   readFilters();
   applyFilters();

@@ -2,38 +2,42 @@
 
 A public directory of open jobs, built to grow toward every posting on the internet without pretending a single scrape can get there. This version pulls real listings from company applicant-tracking systems, keeps every observation, and publishes a static dashboard.
 
-The index is append-only. A job keeps `first_seen` from the first time a source returned it and `last_seen` from the latest sighting. When a board is fully refreshed and a listing is gone, that listing is marked closed. The old observations stay in SQLite.
+The index is append-only. A job keeps `first_seen` from the first time a source returned it and `last_seen` from the latest sighting. When a board is fully refreshed and a listing is gone, that listing is marked closed. Each new or changed sighting, and each close or reopen, is written to an immutable Parquet part. Identical daily re-fetches advance `last_seen` and do not copy the payload again, so the scheduled refresh stays under GitHub's file-size limit.
 
 ## Coverage in this build
 
-Pulled 2026-11-24 from the seed registry. The dashboard headline matches `docs/data/stats.json`.
+Pulled 2026-11-24 from the full CC0 catalog (11,593 boards with a positive open-role count) plus the verified SmartRecruiters boards. The dashboard headline matches `docs/data/stats.json`.
 
 | | |
 |---|---|
-| Open jobs (deduped) | 53,672 |
-| Open postings | 56,210 |
-| Companies | 434 |
-| Countries | 94 |
-| Jobs with a pay range | 5,403 |
-| Remote jobs | 6,170 |
-| Seeded boards | 456, of which 450 returned a live board. Six stale Lever tokens 404'd and were not closed-out because the read failed. |
-| Kalshi | 68 open jobs (Greenhouse `kalshi` and Ashby `kalshi`) |
-| Polymarket | 33 open jobs (Ashby `polymarket`), including structured USD ranges |
+| Open jobs (deduped) | 779,021 |
+| Open postings | 887,530 |
+| Companies | 11,754 |
+| Countries | 208 |
+| Jobs with a pay range | 27,291 |
+| Registry boards | 11,593 |
+| Kalshi | 67 open jobs (Greenhouse and Ashby) |
+| Polymarket | 33 open jobs (Ashby), with structured USD ranges |
 
 Postings by source:
 
 | Source | Open postings |
 |---|---|
-| Greenhouse | 20,922 |
-| SmartRecruiters | 11,883 |
-| Lever | 7,641 |
-| Workday | 6,512 |
-| Ashby | 4,336 |
-| Workable | 2,715 |
-| Recruitee | 2,195 |
-| Common Crawl | 6 |
+| Workday | 593,910 |
+| Greenhouse | 138,253 |
+| Workable | 53,152 |
+| Ashby | 47,778 |
+| Recruitee | 17,636 |
+| SmartRecruiters | 11,861 |
+| Personio | 9,007 |
+| Rippling | 8,293 |
+| Lever | 7,640 |
 
-The Common Crawl sample read the November 2026 crawl `CC-MAIN-2026-47`, fetched 7 WARC records that contained schema.org `JobPosting` JSON-LD (Kalshi, Polymarket, and OpenAI Foundation pages on Ashby), and stored 6 listings after a duplicate URL collapsed. Those rows are snapshot observations: a later sample that does not include them will not mark them closed.
+About 400 catalog tokens 404'd or returned 403/422 and were not used to close jobs. Workday paging recovered full catalogs where the API allows it (CVS Health 18,616). Some large tenants still stop short: the search wraps or a facet bucket stays above the cap, and the client also stops a single board at 4,000 requests so one employer cannot stall the run. Target returned 2,408, Walmart 19,731, Circle K 8,865. Those boards are marked partial and are not used to close listings that were not returned.
+
+Common Crawl was not re-sampled in this full ATS run. `python3 -m jobdir cc-sample` still extracts `JobPosting` JSON-LD from the latest crawl and will not close jobs that a later sample misses.
+
+Parquet on disk is 182 MB across 24 files. The largest file is 49.3 MB, under GitHub's 100 MB hard limit and under the 50 MB warning. The dashboard shards are about 346 MB combined, each file about 10–13 MB.
 
 ![Global Jobs Index dashboard](docs/screenshot.png)
 
@@ -46,14 +50,12 @@ flowchart LR
   registry["data/boards.yaml"] --> run["python -m jobdir run"]
   catalog["CC0 board catalog"] --> discover["python -m jobdir discover"]
   discover --> registry
-  gh["Greenhouse"] --> run
-  lever["Lever"] --> run
-  ashby["Ashby"] --> run
-  others["Workable, SmartRecruiters, Recruitee, Workday"] --> run
+  ats["Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee, Workday, Personio, Rippling"] --> run
   cc["Common Crawl JSON-LD sample"] --> run
   usajobs["USAJobs if API key is set"] --> run
-  run --> sqlite["data/jobs.sqlite"]
-  sqlite --> export["docs/data/jobs.json"]
+  run --> scratch["data/work.sqlite scratch"]
+  scratch --> parquet["data/parquet observation parts and projection"]
+  scratch --> export["docs/data shards"]
   export --> pages["GitHub Pages dashboard"]
 ```
 
@@ -63,14 +65,16 @@ Layers:
 2. **Adapters.** Each source implements `fetch(board, client) -> FetchResult`. A result is either a complete live-board read, a failed read, a skip, or a snapshot. Only a complete live-board read can mark listings closed.
 3. **Normalize.** Company, title, city, region, country, remote/hybrid/on-site, pay range and currency, department, posted date, apply URL, and source.
 4. **Dedupe.** A job id is a hash of normalized company + title + location. The same role on Greenhouse and Ashby becomes one job with two listings. Different cities stay separate.
-5. **Store.** SQLite tables `runs`, `run_boards`, `listings`, `jobs`, and `observations`. Observations are insert-only. `listings` and `jobs` are the current projection (`first_seen`, `last_seen`, `status`).
-6. **Dashboard.** `docs/` is a static site. It reads `docs/data/stats.json` and `docs/data/jobs.json` and filters in the browser.
+5. **Store.** A gitignored SQLite file (`data/work.sqlite`) is the scratch projection for one run. Durable history is ZSTD Parquet under `data/parquet/`:
+   - `observations/source=*/dt=*/part-*.parquet` — append-only. A part is never rewritten. Rows are new listings, payload changes, closes, and reopens, each with `observed_at`.
+   - `projection/listings/` and `projection/jobs/` — derived current state, including `first_seen` and `last_seen`. Replaced each publish because it is computed from the scratch database plus the history of changes.
+6. **Dashboard.** `docs/` is a static site. It reads `docs/data/stats.json` and the compact open-job shards listed there.
 
 ### Data model
 
 | Table | What it keeps |
 |---|---|
-| `observations` | One row every time a listing is seen, and one row when it is marked closed. Never updated. |
+| `observations` | One Parquet row when a listing is first seen, when its normalized payload changes, and when it is closed or reopened. Parts are insert-only. |
 | `listings` | One row per source listing (`source + board + source job id`) with `first_seen`, `last_seen`, `open` or `closed`. |
 | `jobs` | Deduplicated projection. Open while any listing is open. |
 | `runs` / `run_boards` | When a pull happened and whether each board succeeded. A failed board does not close its jobs. |
@@ -88,8 +92,10 @@ Public, no-login APIs:
 | Ashby | `api.ashbyhq.com/posting-api/job-board/{token}?includeCompensation=true` | Kalshi, Polymarket, OpenAI, Cursor, Ramp, and others. |
 | Workable | `apply.workable.com/api/v1/widget/accounts/{token}` | Widget API. Cloudflare may rate-limit; the client backs off. |
 | SmartRecruiters | `api.smartrecruiters.com/v1/companies/{id}/postings` | Paginated. Includes Wise, Bosch Group, ServiceNow, Grab, Palantir. |
-| Recruitee | `{token}.recruitee.com/api/offers/` | Sample of boards, including Tether when the catalog lists it. |
-| Workday | `POST /wday/cxs/{tenant}/{site}/jobs` | NVIDIA, Salesforce, Adobe, Cisco, Intel, Workday. Page size 20. The public search reports at most 2,000 hits; a board that hits that cap is **not** used to mark jobs closed. |
+| Recruitee | `{token}.recruitee.com/api/offers/` | Full catalog of boards with open roles. |
+| Personio | `{token}.jobs.personio.de/xml` | Public XML feed. Descriptions are discarded. |
+| Rippling | `api.rippling.com/platform/api/ats/v1/board/{token}/jobs` | Public JSON list. |
+| Workday | `POST /wday/cxs/{tenant}/{site}/jobs` | Page size 20. Some tenants paginate the whole catalog. Others wrap to page one after about 2,000 hits even when facet counts are higher. A wrapped board is re-read once per facet value (and one more facet level if a bucket is still capped). A board that is still short of its facet total is not used to mark jobs closed. |
 | USAJobs | `data.usajobs.gov/api/search` | Used only when both `USAJOBS_API_KEY` and `USAJOBS_USER_AGENT` are set. Otherwise the run logs a skip and continues. |
 | Common Crawl | Latest crawl CDX + WARC byte ranges | Sampled JSON-LD `JobPosting` extraction using URL prefix queries. A bare `*` query 404s on the current index. Snapshot source: absence from a sample does not close jobs. |
 
@@ -111,11 +117,7 @@ Rebuild the seed:
 python3 scripts/build_registry.py
 ```
 
-The seed is:
-
-- Greenhouse, Ashby, SmartRecruiters, and Workday boards whose public API was checked while building this version, including major trading firms (Jane Street, DRW, Jump Trading, IMC, Optiver, Virtu, Flow Traders, Tower Research, Akuna, Five Rings, PDT, Point72, WorldQuant, Squarepoint, Bridgewater) and crypto companies (Coinbase, Binance, Gemini, Ripple, Fireblocks, BitGo, FalconX, Galaxy Digital, and Kalshi / Polymarket on Ashby).
-- Every Lever board with open roles in the CC0 catalog.
-- A mid-size sample of Workable and Recruitee boards, skipping names that look like staffing agencies.
+The registry is the full CC0 catalog of boards that had a positive open-role count on 2026-11-19, for Greenhouse, Ashby, Lever, Workable, Workday, Recruitee, Personio, and Rippling, plus the SmartRecruiters boards verified directly against that API. Curated display names override the catalog slug for trading and crypto companies (Jane Street, DRW, Jump, IMC, Optiver, Virtu, Kalshi, Polymarket, Coinbase, and the rest of the checked set).
 
 `data/discovery/cc0-board-directory.csv` is a CC0 snapshot (2026-11-19) of a public board directory: 12,244 board ids across Greenhouse, Ashby, Workable, Workday, Recruitee, Lever, Personio, and Rippling. Attribution is in `data/discovery/ATTRIBUTION.txt`. Jobs are fetched again from the vendor APIs; listing text is not copied from the catalog.
 
@@ -153,7 +155,7 @@ Requirements: Python 3.11+. No third-party packages.
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 scripts/run_local.sh
+python3 scripts/run_local.sh --resume
 # or
 python3 -m jobdir run
 python3 -m jobdir run --sources ashby --boards kalshi,polymarket
@@ -163,9 +165,10 @@ python3 -m jobdir export
 
 Outputs:
 
-- `data/jobs.sqlite` — history and the current projection
-- `docs/data/jobs.json` — open jobs for the dashboard
-- `docs/data/stats.json` — headline counts
+- `data/parquet/` — append-only observation parts and the derived projection
+- `data/work.sqlite` — gitignored scratch database for the run
+- `docs/data/stats.json` — headline counts and the list of shard files
+- `docs/data/shards/` — compact open jobs, one or more files per source
 
 Serve the dashboard locally:
 
@@ -188,7 +191,7 @@ The user-agent must be the email address USAJobs asks for. Without either variab
 ### GitHub Actions
 
 - `.github/workflows/test.yml` runs the unit tests.
-- `.github/workflows/refresh.yml` runs the ATS pull daily at 06:30 UTC and on demand, then commits `data/jobs.sqlite` and `docs/data`. Optional secrets: `USAJOBS_API_KEY`, `USAJOBS_USER_AGENT`.
+- `.github/workflows/refresh.yml` runs the ATS pull daily at 06:30 UTC (timeout 330 minutes) and commits `data/parquet` plus `docs/data`. Unchanged listings do not append a second payload, so the commit stays bounded. Optional secrets: `USAJOBS_API_KEY`, `USAJOBS_USER_AGENT`. Resume a local run with `python3 -m jobdir run --resume`.
 - `.github/workflows/pages.yml` deploys `docs/` to GitHub Pages. In the repo settings, set Pages to GitHub Actions.
 
 ## Dashboard
@@ -208,15 +211,15 @@ The page is static HTML, CSS, and one script. It shows total open jobs, companie
 
 ## Known gaps
 
-- The seed is a working slice, not the full catalog. Greenhouse alone has about 3,500 boards and 140,000 reported roles in the CC0 file; this run uses the boards named above.
-- Retail-scale Workday sites (pharmacy, big-box, dollar stores) are in the catalog and omitted here so the first dashboard is not dominated by a 2,000-row search cap of hourly roles.
+- The registry is every catalog board with a positive open-role count (11,593) plus SmartRecruiters. About 400 of those tokens now 404 or 403. Boards with a zero count in the 2026-11-19 catalog were not included.
+- Workday still cannot return every opening at every large employer. CVS Health came back in full (18,616). Target stopped at 2,408, Walmart at 19,731, and Circle K at 8,865 because a facet bucket wrapped or the per-board request budget (4,000) was spent. Partial boards are not used to mark unseen listings closed.
 - Lever and Recruitee company labels are title-cased board tokens when the API does not return a display name.
 - A role posted in two cities is two jobs. A retitled role is a new job; the old one closes on the next full read of that board.
-- Common Crawl coverage in this commit is a 7-record sample from `CC-MAIN-2026-47`, not a crawl of the web. Wildcard CDX queries 404 or time out; the sampler uses URL prefixes. `python3 -m jobdir cc-run` records the page checkpoint for a full resumable walk.
+- This full ATS rebuild did not re-sample Common Crawl. `python3 -m jobdir cc-sample` still reads `JobPosting` JSON-LD from the latest crawl using URL prefixes. Wildcard CDX queries 404 or time out. `python3 -m jobdir cc-run` records the page checkpoint for a full resumable walk.
 - USAJobs is empty unless you export a key.
 - Coresignal, Lightcast, and TheirStack do not fetch anything yet.
 - No LinkedIn. No Indeed.
-- `data/jobs.sqlite` is about 88 MB after this first pull. GitHub accepts it and warns above 50 MB. Each daily refresh appends observations, so the file will eventually pass GitHub's 100 MB limit. Before that, move observation history to chunked Parquet (or Git LFS) and keep only the job projection in the committed database.
+- Observation parts are append-only and small on a quiet day. The projection Parquet is rewritten each publish. If `jobs.parquet` exceeds 80 MB it is split into hash buckets so no file crosses GitHub's 100 MB limit. Git LFS is not used; partitioned Parquet stays in normal git.
 
 ## Tests
 

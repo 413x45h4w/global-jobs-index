@@ -68,6 +68,7 @@ class GreenhouseAdapter:
             observations.append(
                 _base_obs(
                     board,
+                    company=(job.get("company_name") or board.company or "").strip() or board.company,
                     source_job_id=str(job.get("id") or ""),
                     title=title,
                     apply_url=job.get("absolute_url") or "",
@@ -395,11 +396,19 @@ class RecruiteeAdapter:
 
 
 class WorkdayAdapter:
+    """Workday CXS search.
+
+    Some tenants paginate through their whole catalog. Others wrap back to the
+    first page once `offset` passes a cap (often 2,000) even when facet counts
+    show more jobs. When that happens, the same search is repeated once per
+    facet value so each bucket stays under the cap.
+    """
+
     name = "workday"
     kind = LIVE
     page_size = 20
-    # The public CXS search reports at most this many hits for large employers.
-    cap = 2000
+    max_pages = 3500
+    max_requests = 4000
 
     def fetch(self, board: Board, client: Client) -> FetchResult:
         if not (board.workday_host and board.workday_tenant and board.workday_site):
@@ -415,51 +424,130 @@ class WorkdayAdapter:
             f"https://{board.workday_host}/wday/cxs/"
             f"{board.workday_tenant}/{board.workday_site}/jobs"
         )
-        observations = []
-        offset = 0
-        total = None
-        truncated = False
+        seen: set[str] = set()
+        budget = {"n": 0}
+        jobs: list = []
         try:
-            while offset < self.cap:
-                payload = client.post_json(
-                    url,
-                    {"appliedFacets": {}, "limit": self.page_size, "offset": offset, "searchText": ""},
-                    timeout=60,
-                )
-                if total is None:
-                    total = int(payload.get("total") or 0)
-                batch = payload.get("jobPostings") or []
-                if not batch:
-                    break
-                for job in batch:
-                    observations.append(self._one(board, job))
-                offset += len(batch)
-                if len(batch) < self.page_size or (total is not None and offset >= total):
-                    break
-            if total is not None and total >= self.cap and offset >= self.cap:
-                truncated = True
+            jobs, facets, wrapped, truncated = self._paginate(client, url, {}, seen, budget)
+            facet_total = _facet_coverage(facets)
+            if wrapped and facet_total > len(jobs) + self.page_size:
+                more, split_truncated = self._split(client, url, facets, seen, budget, depth=0)
+                jobs.extend(more)
+                truncated = truncated or split_truncated
+                wrapped = bool(split_truncated)
+            elif wrapped and facets and 0 < facet_total <= len(jobs) + self.page_size:
+                wrapped = False
+            complete = not truncated and not wrapped
         except HttpError as exc:
+            if jobs:
+                observations = [obs for job in jobs if (obs := self._one(board, job))]
+                return self._result(board, observations, complete=False, truncated=True, error=str(exc))
             return _fail(board, exc)
-        complete = not truncated and total is not None and offset >= min(total, self.cap) and not truncated
-        if truncated:
-            complete = False
+        observations = [obs for job in jobs if (obs := self._one(board, job))]
+        note = ""
+        if not complete:
+            note = f"workday partial unique={len(observations)} requests={budget['n']}"
+        return self._result(board, observations, complete=complete, truncated=not complete, error=note)
+
+    def _result(self, board, observations, complete, truncated, error="", seen_jobs=None):
         return FetchResult(
             source=self.name,
             board_id=board.board_id,
             success=True,
             complete=complete,
             kind=self.kind,
-            observations=[obs for obs in observations if obs is not None],
+            observations=observations,
             truncated=truncated,
+            error=error,
         )
+
+    def _paginate(self, client, url, facets, seen, budget):
+        """Page one facet selection.
+
+        `seen` is the set of ids already stored for this board. A page that only
+        repeats ids from earlier offsets of *this* walk is a cap wrap. Ids that
+        were found by a previous walk are skipped but do not stop paging, so a
+        facet split can continue past the jobs the capped walk already kept.
+        """
+        collected = []
+        facets_out = None
+        wrapped = False
+        truncated = False
+        offset = 0
+        pages = 0
+        local: set[str] = set()
+        while pages < self.max_pages:
+            if budget["n"] >= self.max_requests:
+                truncated = True
+                break
+            budget["n"] += 1
+            payload = client.post_json(
+                url,
+                {"appliedFacets": facets, "limit": self.page_size, "offset": offset, "searchText": ""},
+                timeout=60,
+            )
+            if facets_out is None:
+                facets_out = payload.get("facets")
+            batch = payload.get("jobPostings") or []
+            if not batch:
+                break
+            page_ids = [job_id for job in batch if (job_id := _workday_id(job))]
+            if page_ids and all(job_id in local for job_id in page_ids):
+                wrapped = True
+                break
+            for job in batch:
+                job_id = _workday_id(job)
+                if not job_id or job_id in local:
+                    continue
+                local.add(job_id)
+                if job_id in seen:
+                    continue
+                seen.add(job_id)
+                collected.append(job)
+            pages += 1
+            if len(batch) < self.page_size:
+                break
+            offset += len(batch)
+        else:
+            truncated = True
+        if budget["n"] >= self.max_requests:
+            truncated = True
+        return collected, facets_out, wrapped, truncated
+
+    def _split(self, client, url, facets, seen, budget, depth):
+        choice = _pick_split_facet(facets, len(seen))
+        if not choice or depth > 1:
+            return [], True
+        param, values = choice
+        collected = []
+        truncated = False
+        for value in values:
+            count = value.get("count") or 0
+            if count <= 0 or not value.get("id"):
+                continue
+            if budget["n"] >= self.max_requests:
+                truncated = True
+                break
+            jobs, child_facets, wrapped, hit_budget = self._paginate(
+                client, url, {param: [value["id"]]}, seen, budget
+            )
+            collected.extend(jobs)
+            truncated = truncated or hit_budget
+            child_total = _facet_coverage(child_facets)
+            if wrapped and child_total > count and depth < 1:
+                more, child_truncated = self._split(client, url, child_facets, seen, budget, depth + 1)
+                collected.extend(more)
+                truncated = truncated or child_truncated
+            elif wrapped and len(jobs) + self.page_size < count:
+                truncated = True
+        return collected, truncated
 
     def _one(self, board: Board, job: dict) -> JobObservation | None:
         title = (job.get("title") or "").strip()
         path = job.get("externalPath") or ""
         if not title or not path:
             return None
-        bullet = job.get("bulletFields") or []
-        source_id = str(bullet[0]) if bullet else path
+        source_id = _workday_id(job) or path
         apply_url = f"https://{board.workday_host}/en-US/{board.workday_site}{path}"
         location = job.get("locationsText") or ""
         workplace = "remote" if "remote" in location.lower() else ""
@@ -472,6 +560,55 @@ class WorkdayAdapter:
             workplace=workplace,
             posted_at=parse_posted(job.get("postedOn")),
         )
+
+
+def _workday_id(job: dict) -> str:
+    path = job.get("externalPath") or ""
+    if path:
+        return path
+    bullet = job.get("bulletFields") or []
+    return str(bullet[0]) if bullet else ""
+
+
+def _facet_values(facets) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for facet in facets or []:
+        values = facet.get("values") or []
+        nested = values and isinstance(values[0], dict) and "values" in values[0] and "id" not in values[0]
+        if nested:
+            for child in values:
+                param = child.get("facetParameter") or facet.get("facetParameter") or ""
+                grouped.setdefault(param, []).extend(v for v in (child.get("values") or []) if v.get("id"))
+            continue
+        param = facet.get("facetParameter") or ""
+        grouped.setdefault(param, []).extend(v for v in values if v.get("id"))
+    return grouped
+
+
+def _facet_coverage(facets) -> int:
+    best = 0
+    for values in _facet_values(facets).values():
+        best = max(best, sum(v.get("count") or 0 for v in values))
+    return best
+
+
+def _pick_split_facet(facets, already: int) -> tuple[str, list[dict]] | None:
+    """Pick a facet whose buckets sum to more jobs than the capped page walk found."""
+    best = None
+    for param, values in _facet_values(facets).items():
+        usable = [v for v in values if (v.get("count") or 0) > 0]
+        if len(usable) < 2:
+            continue
+        total = sum(v.get("count") or 0 for v in usable)
+        if total <= already + 20:
+            continue
+        max_bucket = max(v.get("count") or 0 for v in usable)
+        score = (total, -max_bucket, -len(usable))
+        if best is None or score > best[0]:
+            best = (score, param, usable)
+    if not best:
+        return None
+    return best[1], best[2]
 
 
 def _num(value) -> float | None:

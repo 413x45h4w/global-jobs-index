@@ -20,17 +20,20 @@ from jobdir.discover import catalog_to_boards, load_catalog, missing_boards, par
 from jobdir.export import export_dashboard
 from jobdir.http import Client
 from jobdir.models import Board
+from jobdir.parquet_export import append_run_manifest, bootstrap_projection, export_parquet, parquet_stats
 from jobdir.pipeline import run_pipeline
 from jobdir.sources.commoncrawl import CommonCrawlAdapter, cdx_page_count, latest_crawl
 from jobdir.storage import Store
 from jobdir.yamlreg import dump_boards, load_boards_file
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB = ROOT / "data" / "jobs.sqlite"
+DEFAULT_DB = ROOT / "data" / "work.sqlite"
 DEFAULT_REGISTRY = ROOT / "data" / "boards.yaml"
 DEFAULT_OUT = ROOT / "docs" / "data"
 DEFAULT_CATALOG = ROOT / "data" / "discovery" / "cc0-board-directory.csv"
+DEFAULT_PARQUET = ROOT / "data" / "parquet"
 CHECKPOINT = ROOT / "data" / "cc" / "checkpoint.json"
+BOARD_CHECKPOINT = ROOT / "data" / "checkpoints" / "boards.tsv"
 
 
 def _boards_from_args(args) -> list[Board]:
@@ -44,34 +47,70 @@ def _boards_from_args(args) -> list[Board]:
     return boards
 
 
+def _open_store(args) -> Store:
+    path = Path(args.db)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fresh = not path.exists()
+    store = Store(str(path))
+    if fresh:
+        loaded = bootstrap_projection(store, args.parquet)
+        if loaded:
+            print(f"loaded {loaded} listings from parquet", flush=True)
+    return store
+
+
+def _publish(store: Store, args, stats: dict | None = None) -> dict:
+    parquet_info = export_parquet(store, args.parquet)
+    exported = export_dashboard(store, args.out)
+    if stats is not None:
+        append_run_manifest(args.parquet, {"counts": store.counts(), "parquet": parquet_stats(args.parquet)})
+    return {"parquet": parquet_info, "export": exported}
+
+
 def cmd_run(args) -> int:
     boards = _boards_from_args(args)
     if not boards and not args.with_cc:
         print("No boards selected", file=sys.stderr)
         return 2
-    store = Store(str(args.db))
+    store = _open_store(args)
     try:
+        def _flush(done_boards: int) -> None:
+            info = export_parquet(store, args.parquet)
+            print(f"flush after {done_boards} boards bytes={info['bytes']}", flush=True)
+
         stats = run_pipeline(
             store,
             boards,
             include_commoncrawl=args.with_cc,
             cc_records=args.cc_records,
+            checkpoint=args.checkpoint,
+            resume=args.resume,
+            on_batch=_flush,
+            batch_size=args.flush_every,
         )
-        exported = export_dashboard(store, args.out)
+        published = _publish(store, args, stats)
         store.vacuum()
     finally:
         store.close()
-    print(json.dumps({"store": stats, "export": {k: exported[k] for k in ("open_jobs", "companies", "countries", "notable", "postings_by_source")}}, indent=2))
+    summary = {
+        "open_jobs": published["export"]["open_jobs"],
+        "companies": published["export"]["companies"],
+        "countries": published["export"]["countries"],
+        "notable": published["export"]["notable"],
+        "postings_by_source": published["export"]["postings_by_source"],
+        "parquet_bytes": published["parquet"]["bytes"],
+    }
+    print(json.dumps(summary, indent=2))
     return 0
 
 
 def cmd_export(args) -> int:
-    store = Store(str(args.db))
+    store = _open_store(args)
     try:
-        stats = export_dashboard(store, args.out)
+        published = _publish(store, args, None)
     finally:
         store.close()
-    print(json.dumps(stats, indent=2))
+    print(json.dumps({"open_jobs": published["export"]["open_jobs"], "parquet_bytes": published["parquet"]["bytes"]}, indent=2))
     return 0
 
 
@@ -173,13 +212,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
+    parser.add_argument("--parquet", default=str(DEFAULT_PARQUET))
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="Fetch registry boards and export the dashboard")
     run.add_argument("--sources", default="", help="Comma-separated source names")
     run.add_argument("--boards", default="", help="Comma-separated board ids or company names")
     run.add_argument("--with-cc", action="store_true", help="Also sample Common Crawl JSON-LD")
-    run.add_argument("--cc-records", type=int, default=30)
+    run.add_argument("--cc-records", type=int, default=12)
+    run.add_argument("--resume", action="store_true", help="Skip boards already recorded in the checkpoint")
+    run.add_argument("--checkpoint", default=str(BOARD_CHECKPOINT))
+    run.add_argument("--flush-every", type=int, default=1000)
     run.set_defaults(func=cmd_run)
 
     export = sub.add_parser("export", help="Rebuild docs/data from the database")

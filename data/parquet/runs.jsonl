@@ -1,0 +1,1 @@
+{"counts": {"open_jobs": 779021, "closed_jobs": 0, "open_postings": 887530, "closed_postings": 0, "companies": 11754, "countries": 208, "observations": 887530}, "parquet": {"files": 24, "bytes": 181904223, "largest": {"path": "/workspace/data/parquet/observations/source=workday/dt=2026-11-24/part-000286313.parquet", "bytes": 49312108}}}

@@ -101,9 +101,32 @@ def export_dashboard(store: Store, out_dir: str | Path) -> dict:
         "top_countries": [{"country": row["country"], "jobs": row["n"]} for row in countries],
         "notable": notable,
     }
-    (out / "jobs.json").write_text(json.dumps({"generated_at": stats["generated_at"], "jobs": jobs}, separators=(",", ":")), encoding="utf-8")
+    stats["shards"] = _write_shards(out, jobs)
+    legacy = out / "jobs.json"
+    if legacy.exists():
+        legacy.unlink()
     (out / "stats.json").write_text(json.dumps(stats, indent=2), encoding="utf-8")
     return stats
+
+
+def _write_shards(out: Path, jobs: list[dict]) -> list[str]:
+    shard_dir = out / "shards"
+    if shard_dir.exists():
+        for child in shard_dir.glob("*.json"):
+            child.unlink()
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    grouped: dict[str, list[dict]] = {}
+    for job in jobs:
+        source = (job.get("sources") or ["other"])[0]
+        grouped.setdefault(source, []).append(job)
+    names = []
+    for source, rows in sorted(grouped.items()):
+        for index in range(0, len(rows), 25000):
+            name = f"shards/{source}-{index // 25000:03d}.json"
+            payload = {"jobs": rows[index : index + 25000]}
+            (out / name).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+            names.append(f"data/{name}")
+    return names
 
 
 def _location(row) -> str:
