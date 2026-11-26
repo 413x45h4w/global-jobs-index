@@ -1,0 +1,5 @@
+docs/data/** linguist-generated=true
+data/jobs.sqlite linguist-generated=true
+data/discovery/cc0-board-directory.csv linguist-generated=true
+data/boards.yaml linguist-generated=true
+data/boards.csv linguist-generated=true

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+data/tmp/
+data/cc/warc/
+data/work.sqlite
+data/work.sqlite-*
+data/checkpoints/
+*.log

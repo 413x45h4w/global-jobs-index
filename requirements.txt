@@ -1,0 +1,6 @@
+duckdb>=1.1
+# Runtime is the Python 3.11+ standard library plus DuckDB for Parquet.
+# Optional environment variables:
+#   USAJOBS_API_KEY, USAJOBS_USER_AGENT
+#   CORESIGNAL_API_KEY, LIGHTCAST_CLIENT_ID, THEIRSTACK_API_KEY
+# Licensed feeds are stubs until a contract is wired up. They are never scraped.

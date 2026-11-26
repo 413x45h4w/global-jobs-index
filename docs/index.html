@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Global Jobs Index</title>
+    <meta
+      name="description"
+      content="A public, append-only directory of job postings from company ATS boards and other open sources."
+    />
+    <link rel="stylesheet" href="styles.css?v=2" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <p class="eyebrow">Public ATS feeds · append-only</p>
+        <h1>Global Jobs Index</h1>
+        <p class="lede">
+          Open roles from company job boards, kept with the first day they were seen and the last day they were still up.
+        </p>
+      </div>
+      <p class="generated" id="generated">Loading the index…</p>
+    </header>
+
+    <section class="stats" id="stats" aria-label="Headline counts"></section>
+    <section class="sources" id="sources" aria-label="Postings by source"></section>
+
+    <form class="filters" id="filters">
+      <label>
+        Search
+        <input id="q" type="search" placeholder="Title, company, or location" autocomplete="off" />
+      </label>
+      <label>
+        Company
+        <input id="company" type="search" placeholder="Kalshi" autocomplete="off" />
+      </label>
+      <label>
+        Source
+        <select id="source"><option value="">All sources</option></select>
+      </label>
+      <label>
+        Workplace
+        <select id="workplace">
+          <option value="">Any</option>
+          <option value="remote">Remote</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="onsite">On-site</option>
+        </select>
+      </label>
+      <label>
+        Country
+        <select id="country"><option value="">All countries</option></select>
+      </label>
+      <label>
+        Sector
+        <select id="sector"><option value="">All sectors</option></select>
+      </label>
+      <label>
+        Posted after
+        <input id="posted" type="date" />
+      </label>
+      <button type="button" id="clear">Reset</button>
+    </form>
+
+    <p class="match" id="match"></p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Title</th>
+            <th>Location</th>
+            <th>Pay</th>
+            <th>Posted</th>
+            <th>Source</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <nav class="pager" id="pager"></nav>
+    <footer>
+      <p>
+        Counts are deduplicated jobs unless a figure says postings. A posting drops out of this open list when its
+        source board no longer returns it. History stays in the SQLite database.
+      </p>
+    </footer>
+    <script src="app.js?v=3"></script>
+  </body>
+</html>

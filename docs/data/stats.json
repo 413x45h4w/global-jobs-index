@@ -1,0 +1,197 @@
+{
+  "generated_at": "2026-11-25T01:33:38+00:00",
+  "open_jobs": 779021,
+  "closed_jobs": 0,
+  "open_postings": 887530,
+  "closed_postings": 0,
+  "companies": 11754,
+  "countries": 208,
+  "observations": 887530,
+  "with_pay": 27625,
+  "remote_jobs": 53056,
+  "postings_by_source": {
+    "workday": 593910,
+    "greenhouse": 138253,
+    "workable": 53152,
+    "ashby": 47778,
+    "recruitee": 17636,
+    "smartrecruiters": 11861,
+    "personio": 9007,
+    "rippling": 8293,
+    "lever": 7640
+  },
+  "jobs_by_sector": {
+    "other": 691260,
+    "health": 41471,
+    "tech": 24352,
+    "crypto": 9391,
+    "industrial": 5028,
+    "fintech": 4572,
+    "trading": 2376,
+    "markets": 571
+  },
+  "top_countries": [
+    {
+      "country": "United States",
+      "jobs": 249824
+    },
+    {
+      "country": "United Kingdom",
+      "jobs": 15766
+    },
+    {
+      "country": "Canada",
+      "jobs": 14274
+    },
+    {
+      "country": "India",
+      "jobs": 12527
+    },
+    {
+      "country": "Germany",
+      "jobs": 12031
+    },
+    {
+      "country": "Netherlands",
+      "jobs": 8954
+    },
+    {
+      "country": "Singapore",
+      "jobs": 8395
+    },
+    {
+      "country": "France",
+      "jobs": 4818
+    },
+    {
+      "country": "China",
+      "jobs": 4058
+    },
+    {
+      "country": "Australia",
+      "jobs": 3798
+    },
+    {
+      "country": "Mexico",
+      "jobs": 3627
+    },
+    {
+      "country": "Japan",
+      "jobs": 3512
+    },
+    {
+      "country": "Philippines",
+      "jobs": 3494
+    },
+    {
+      "country": "Spain",
+      "jobs": 2987
+    },
+    {
+      "country": "Greece",
+      "jobs": 2891
+    },
+    {
+      "country": "Poland",
+      "jobs": 2827
+    },
+    {
+      "country": "Malaysia",
+      "jobs": 2774
+    },
+    {
+      "country": "Brazil",
+      "jobs": 2730
+    },
+    {
+      "country": "Thailand",
+      "jobs": 2453
+    },
+    {
+      "country": "Ireland",
+      "jobs": 2154
+    },
+    {
+      "country": "Italy",
+      "jobs": 1979
+    },
+    {
+      "country": "Saudi Arabia",
+      "jobs": 1862
+    },
+    {
+      "country": "United Arab Emirates",
+      "jobs": 1797
+    },
+    {
+      "country": "Taiwan",
+      "jobs": 1695
+    },
+    {
+      "country": "Portugal",
+      "jobs": 1637
+    },
+    {
+      "country": "Belgium",
+      "jobs": 1566
+    },
+    {
+      "country": "Colombia",
+      "jobs": 1527
+    },
+    {
+      "country": "Indonesia",
+      "jobs": 1514
+    },
+    {
+      "country": "South Korea",
+      "jobs": 1448
+    },
+    {
+      "country": "Switzerland",
+      "jobs": 1425
+    }
+  ],
+  "notable": {
+    "kalshi": 67,
+    "polymarket": 33
+  },
+  "shards": [
+    "data/shards/ashby-000.json",
+    "data/shards/ashby-001.json",
+    "data/shards/greenhouse-000.json",
+    "data/shards/greenhouse-001.json",
+    "data/shards/greenhouse-002.json",
+    "data/shards/greenhouse-003.json",
+    "data/shards/greenhouse-004.json",
+    "data/shards/greenhouse-005.json",
+    "data/shards/lever-000.json",
+    "data/shards/personio-000.json",
+    "data/shards/recruitee-000.json",
+    "data/shards/rippling-000.json",
+    "data/shards/smartrecruiters-000.json",
+    "data/shards/workable-000.json",
+    "data/shards/workable-001.json",
+    "data/shards/workable-002.json",
+    "data/shards/workday-000.json",
+    "data/shards/workday-001.json",
+    "data/shards/workday-002.json",
+    "data/shards/workday-003.json",
+    "data/shards/workday-004.json",
+    "data/shards/workday-005.json",
+    "data/shards/workday-006.json",
+    "data/shards/workday-007.json",
+    "data/shards/workday-008.json",
+    "data/shards/workday-009.json",
+    "data/shards/workday-010.json",
+    "data/shards/workday-011.json",
+    "data/shards/workday-012.json",
+    "data/shards/workday-013.json",
+    "data/shards/workday-014.json",
+    "data/shards/workday-015.json",
+    "data/shards/workday-016.json",
+    "data/shards/workday-017.json",
+    "data/shards/workday-018.json",
+    "data/shards/workday-019.json"
+  ]
+}
